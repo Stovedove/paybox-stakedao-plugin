@@ -1,5 +1,5 @@
 {
-  "tool": "strategy_snapshot",
+  "tool": "strategy_status",
   "arguments": {
     "catalog_item_id": "quant_strat"
   }
