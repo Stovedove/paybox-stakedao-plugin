@@ -1,0 +1,6 @@
+{
+  "tool": "strategy_snapshot",
+  "arguments": {
+    "catalog_item_id": "quant_strat"
+  }
+}
