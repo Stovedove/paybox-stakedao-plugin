@@ -53,6 +53,16 @@ const outputSchema = z.discriminatedUnion("outcome", [
 type PayableId = z.infer<typeof payableId>;
 type SnapshotOutput = z.infer<typeof outputSchema>;
 
+const statusOutputSchema = z.object({
+  catalog_item_id: payableId,
+  generated_at: z.string().nullable(),
+  age_seconds: z.number().int().nonnegative().nullable(),
+  stale: z.boolean(),
+  ready: z.boolean(),
+}).strict();
+
+type StatusOutput = z.infer<typeof statusOutputSchema>;
+
 type ReferenceItem = {
   generated_at: string;
   age_seconds: number | null;
@@ -108,11 +118,50 @@ function statusResult(text: string, structured: SnapshotOutput) {
   };
 }
 
+function freeStatusResult(text: string, structured: StatusOutput) {
+  return {
+    content: [{ type: "text" as const, text }],
+    structuredContent: statusOutputSchema.parse(structured),
+  };
+}
+
 function createServer() {
   const server = new McpServer(
     { name: "stakao-snapshot", version: "0.1.0" },
     { supportedProtocolVersions: [PROTOCOL_VERSION] },
   );
+
+  server.registerTool("strategy_status", {
+    title: "Stakao strategy status",
+    description: "Reads the public freshness status for one Stakao strategy. This free check never fetches a premium allocation, proposes a payment, selects a wallet, or performs a transaction.",
+    inputSchema: z.object({ catalog_item_id: payableId }).strict(),
+    outputSchema: statusOutputSchema,
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
+  }, async ({ catalog_item_id: id }) => {
+    const item = await referenceItem(id);
+    const label = names[id];
+    if (item === null) {
+      return freeStatusResult(
+        `${label} status could not be read. No payment is required.`,
+        { catalog_item_id: id, generated_at: null, age_seconds: null, stale: true, ready: false },
+      );
+    }
+    return freeStatusResult(
+      `${label} is ${item.ready ? "ready" : "not ready"}. No payment is required. generated_at is ${item.generated_at}.`,
+      {
+        catalog_item_id: id,
+        generated_at: item.generated_at,
+        age_seconds: item.age_seconds,
+        stale: item.stale || !item.ready,
+        ready: item.ready,
+      },
+    );
+  });
 
   server.registerTool("strategy_snapshot", {
     title: "Stakao snapshot",
